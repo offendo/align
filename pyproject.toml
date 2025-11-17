@@ -19,7 +19,7 @@ dependencies = [
     "tqdm>=4.67.1",
 ]
 readme = "README.md"
-requires-python = ">= 3.8"
+requires-python = ">= 3.10"
 
 [build-system]
 requires = ["hatchling"]
@@ -38,5 +38,5 @@ allow-direct-references = true
 [tool.hatch.build.targets.wheel]
 packages = ["src/align"]
 
-[tool.black]
-line-length = 119
+[tool.ruff]
+line-length = 120

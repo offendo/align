@@ -80,9 +80,7 @@ def _get_chat_marker(tokenizer: PreTrainedTokenizer) -> list[int]:
     if "Qwen" in tokenizer.name_or_path:
         return tokenizer("<|im_start|>assistant", add_special_tokens=False).input_ids
     if "Llama" in tokenizer.name_or_path:
-        return tokenizer(
-            "<|start_header_id|>assistant", add_special_tokens=False
-        ).input_ids
+        return tokenizer("<|start_header_id|>assistant", add_special_tokens=False).input_ids
     msg = f"tokenizer type {tokenizer.name_or_path} not supported for chat models yet"
     raise NotImplementedError(msg)
 
@@ -130,12 +128,8 @@ def compute_formal_align_score(inputs: dict, model_outputs: CausalLMOutput):
     assert isinstance(logits, torch.FloatTensor)
     log_probs = torch.log_softmax(logits, dim=-1)[:, :-1]
     idxs = inputs["input_ids"][:, 1:]
-    token_log_probs = torch.gather(
-        log_probs.reshape(-1, V), 1, idxs.reshape(-1, 1)
-    ).view(B, -1)
-    fl_token_log_probs = (
-        token_log_probs * fl_mask
-    )  # zero out the ones we don't care about
+    token_log_probs = torch.gather(log_probs.reshape(-1, V), 1, idxs.reshape(-1, 1)).view(B, -1)
+    fl_token_log_probs = token_log_probs * fl_mask  # zero out the ones we don't care about
     mean_log_probs = fl_token_log_probs.sum(dim=-1) / fl_mask.sum(dim=-1)
     certainty_score = torch.exp(mean_log_probs)
 
@@ -152,28 +146,20 @@ def compute_formal_align_score(inputs: dict, model_outputs: CausalLMOutput):
 
 
 class FormalAlignTrainer(SFTTrainer):
-    def compute_loss(
-        self, model, inputs, return_outputs=False, num_items_in_batch=None
-    ):
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         B, N = inputs["input_ids"].shape
 
         # Cross entropy loss (autoformalization loss)
         inputs["output_hidden_states"] = True
         ce_loss, outputs = super().compute_loss(model, inputs, return_outputs=True)
-        ce_loss = (
-            ce_loss * inputs["aligned"]
-        )  # only want to count the positive examples
-        ce_loss = (
-            ce_loss.sum() / inputs["aligned"].sum() if inputs["aligned"].sum() else 0.0
-        )
+        ce_loss = ce_loss * inputs["aligned"]  # only want to count the positive examples
+        ce_loss = ce_loss.sum() / inputs["aligned"].sum() if inputs["aligned"].sum() else 0.0
 
         scores = compute_formal_align_score(inputs, outputs)
         certainty_score = scores["certainty_score"]
         similarity_score = scores["similarity_score"]
 
-        cl_loss = F.mse_loss(
-            similarity_score, inputs["aligned"].to(similarity_score.dtype)
-        )
+        cl_loss = F.mse_loss(similarity_score, inputs["aligned"].to(similarity_score.dtype))
 
         # loss = cross entropy + contrastive loss
         loss = ce_loss + cl_loss
@@ -212,8 +198,7 @@ def tokenize_chat(examples, marker: list[int], tokenizer: PreTrainedTokenizer):
 
 def tokenize(examples, marker: list[int], tokenizer: PreTrainedTokenizer):
     prompts = [
-        _formal_prompt(inp, output, tokenizer.eos_token)
-        for inp, output in zip(examples["input"], examples["output"])
+        _formal_prompt(inp, output, tokenizer.eos_token) for inp, output in zip(examples["input"], examples["output"])
     ]
     encoded = tokenizer(prompts, padding=False)
     input_ids = encoded["input_ids"]
@@ -241,26 +226,14 @@ def load_data(
     # Load the data and filter to a small subset if desired
     dataset: DatasetDict = load_dataset(dataset_name)  # type:ignore
     if subset < 1.0:
-        dataset = DatasetDict(
-            {
-                key: val.select(range(int(len(val) * subset)))
-                for key, val in dataset.items()
-            }
-        )
+        dataset = DatasetDict({key: val.select(range(int(len(val) * subset))) for key, val in dataset.items()})
 
     # Tokenize using either chat or non-chat tokenization function
     if use_chat_template:
-        dataset = dataset.map(
-            lambda batch: tokenize_chat(batch, chat_marker, tokenizer), batched=True
-        )
+        dataset = dataset.map(lambda batch: tokenize_chat(batch, chat_marker, tokenizer), batched=True)
     else:
-        dataset = dataset.map(
-            lambda batch: tokenize(batch, marker, tokenizer), batched=True
-        )
-    dataset = dataset.filter(
-        lambda ex: len(ex["input_ids"]) <= max_tokens
-        and len(ex["input_ids"]) >= ex["nl_end_idx"]
-    )
+        dataset = dataset.map(lambda batch: tokenize(batch, marker, tokenizer), batched=True)
+    dataset = dataset.filter(lambda ex: len(ex["input_ids"]) <= max_tokens and len(ex["input_ids"]) >= ex["nl_end_idx"])
     return dataset
 
 
@@ -279,14 +252,10 @@ class CustomCollator(DataCollatorForLanguageModeling):
         texts = [ex.pop("text") for ex in examples if "text" in ex]
         inputs = [ex.pop("input") for ex in examples if "input" in ex]
         outputs = [ex.pop("output") for ex in examples if "output" in ex]
-        misalign_types = [
-            ex.pop("misalign_type") for ex in examples if "misalign_type" in ex
-        ]
+        misalign_types = [ex.pop("misalign_type") for ex in examples if "misalign_type" in ex]
 
         batch = super().__call__(examples, *args, **kwargs)
-        batch["nl_end_idx"] = torch.tensor(
-            [ex["nl_end_idx"] for ex in examples], dtype=torch.long
-        )
+        batch["nl_end_idx"] = torch.tensor([ex["nl_end_idx"] for ex in examples], dtype=torch.long)
 
         if self.mask_inputs:
             # Mask out the input part so the model only trains on completions
@@ -342,45 +311,21 @@ def preprocess_logits_for_metrics(logits, labels):
 @app.command()
 def train(
     # fmt:off
-    model_name: Annotated[
-        str, Option(help="path to model to train", rich_help_panel="Model Config")
-    ],
-    dataset: Annotated[
-        str, Option(help="path to datasets to train", rich_help_panel="Data Config")
-    ],
-    eval_dataset: Annotated[
-        str, Option(help="path to datasets to eval", rich_help_panel="Data Config")
-    ],
-    output_dir: Annotated[
-        str, Option(help="path to output directory", rich_help_panel="Data Config")
-    ],
-    max_tokens: Annotated[
-        int, Option(help="max tokens", rich_help_panel="Training Config")
-    ] = 2048,
+    model_name: Annotated[str, Option(help="path to model to train", rich_help_panel="Model Config")],
+    dataset: Annotated[str, Option(help="path to datasets to train", rich_help_panel="Data Config")],
+    eval_dataset: Annotated[str, Option(help="path to datasets to eval", rich_help_panel="Data Config")],
+    output_dir: Annotated[str, Option(help="path to output directory", rich_help_panel="Data Config")],
+    max_tokens: Annotated[int, Option(help="max tokens", rich_help_panel="Training Config")] = 2048,
     gpu_memory_utilization: Annotated[
         float,
-        Option(
-            help="percent of GPU to give to unsloth", rich_help_panel="Training Config"
-        ),
+        Option(help="percent of GPU to give to unsloth", rich_help_panel="Training Config"),
     ] = 0.6,
-    seed: Annotated[
-        int, Option(help="random seed", rich_help_panel="Training Config")
-    ] = 1234,
-    learning_rate: Annotated[
-        float, Option(help="learning rate", rich_help_panel="Training Config")
-    ] = 5e-5,
-    scheduler: Annotated[
-        str, Option(help="learning rate scheduler", rich_help_panel="Training Config")
-    ] = "cosine",
-    optimizer: Annotated[
-        str, Option(help="optimizer", rich_help_panel="Training Config")
-    ] = "paged_adamw_8bit",
-    num_epochs: Annotated[
-        int, Option(help="number of training epochs", rich_help_panel="Training Config")
-    ] = 1,
-    batch_size: Annotated[
-        int, Option(help="batch size", rich_help_panel="Training Config")
-    ] = 4,
+    seed: Annotated[int, Option(help="random seed", rich_help_panel="Training Config")] = 1234,
+    learning_rate: Annotated[float, Option(help="learning rate", rich_help_panel="Training Config")] = 5e-5,
+    scheduler: Annotated[str, Option(help="learning rate scheduler", rich_help_panel="Training Config")] = "cosine",
+    optimizer: Annotated[str, Option(help="optimizer", rich_help_panel="Training Config")] = "paged_adamw_8bit",
+    num_epochs: Annotated[int, Option(help="number of training epochs", rich_help_panel="Training Config")] = 1,
+    batch_size: Annotated[int, Option(help="batch size", rich_help_panel="Training Config")] = 4,
     negative_sample_ratio: Annotated[
         float,
         Option(
@@ -388,9 +333,7 @@ def train(
             rich_help_panel="Training Config",
         ),
     ] = 1.0,
-    gradient_accumulation: Annotated[
-        int, Option(help="gradient accumulation", rich_help_panel="Training Config")
-    ] = 1,
+    gradient_accumulation: Annotated[int, Option(help="gradient accumulation", rich_help_panel="Training Config")] = 1,
     gradient_checkpointing: Annotated[
         bool,
         Option(
@@ -399,9 +342,7 @@ def train(
             rich_help_panel="Training Config",
         ),
     ] = False,
-    eval_steps: Annotated[
-        int, Option(help="eval steps", rich_help_panel="Training Config")
-    ] = 500,
+    eval_steps: Annotated[int, Option(help="eval steps", rich_help_panel="Training Config")] = 500,
     mask_inputs: Annotated[
         bool,
         Option(
@@ -415,8 +356,6 @@ def train(
     model, tokenizer = load_model(
         model_name,
         max_length=max_tokens,
-        gpu_memory_utilization=gpu_memory_utilization,
-        seed=seed,
     )
 
     training_args = SFTConfig(
@@ -445,16 +384,14 @@ def train(
         save_strategy="steps",
         report_to="wandb",  # Can use Weights & Biases
         output_dir=output_dir,
-        max_seq_length=max_tokens,
+        max_length=max_tokens,
         remove_unused_columns=False,
         include_for_metrics=["loss", "inputs"],
         label_names=["label", "aligned"],
     )
     collator = CustomCollator(tokenizer=tokenizer, mask_inputs=mask_inputs, mlm=False)
     is_chat_model = "instruct" in model_name.lower()
-    data = load_data(
-        dataset, tokenizer, max_tokens=max_tokens, use_chat_template=is_chat_model
-    )
+    data = load_data(dataset, tokenizer, max_tokens=max_tokens, use_chat_template=is_chat_model)
     data = data.shuffle(seed=seed)
     positives = data.filter(lambda ex: ex["aligned"] == 1)
     negatives = data.filter(lambda ex: ex["aligned"] == 0)
@@ -463,14 +400,10 @@ def train(
 
     # Only select some of the negative examples to make training more balanaced
     num_neg_examples = int(negative_sample_ratio * len(positives["train"]))
-    train_data = concatenate_datasets(
-        [positives["train"], negatives["train"].select(range(num_neg_examples))]
-    )
+    train_data = concatenate_datasets([positives["train"], negatives["train"].select(range(num_neg_examples))])
     train_data = train_data.shuffle(seed=seed)
 
-    test_data = load_data(
-        eval_dataset, tokenizer, max_tokens=max_tokens, use_chat_template=is_chat_model
-    )
+    test_data = load_data(eval_dataset, tokenizer, max_tokens=max_tokens, use_chat_template=is_chat_model)
     test_data = test_data.shuffle(seed=seed)
     eval_data = {key: val.select(range(200)) for key, val in test_data.items()}
     trainer = FormalAlignTrainer(
@@ -493,42 +426,24 @@ def train(
         with open(Path(output_dir, f"{split}_metrics.json"), "w") as f:
             json.dump(metrics, f)
         with open(Path(output_dir, f"{split}_outputs.pkl"), "wb") as f:
-            pickle.dump(
-                {"label": labels, "cert_score": cert_score, "sim_score": sim_score}, f
-            )
-        df = pd.DataFrame(
-            {"label": labels, "cert_score": cert_score, "sim_score": sim_score}
-        )
+            pickle.dump({"label": labels, "cert_score": cert_score, "sim_score": sim_score}, f)
+        df = pd.DataFrame({"label": labels, "cert_score": cert_score, "sim_score": sim_score})
         df.to_json(Path(output_dir, f"{split}_preds.json"))
 
 
 @app.command()
 def test(
     # fmt:off
-    model_name: Annotated[
-        str, Option(help="path to model to test", rich_help_panel="Model Config")
-    ],
-    dataset: Annotated[
-        str, Option(help="path to datasets to test", rich_help_panel="Data Config")
-    ],
-    output_dir: Annotated[
-        str, Option(help="path to output directory", rich_help_panel="Data Config")
-    ],
-    max_tokens: Annotated[
-        int, Option(help="max tokens", rich_help_panel="Training Config")
-    ] = 2048,
+    model_name: Annotated[str, Option(help="path to model to test", rich_help_panel="Model Config")],
+    dataset: Annotated[str, Option(help="path to datasets to test", rich_help_panel="Data Config")],
+    output_dir: Annotated[str, Option(help="path to output directory", rich_help_panel="Data Config")],
+    max_tokens: Annotated[int, Option(help="max tokens", rich_help_panel="Training Config")] = 2048,
     gpu_memory_utilization: Annotated[
         float,
-        Option(
-            help="percent of GPU to give to unsloth", rich_help_panel="Training Config"
-        ),
+        Option(help="percent of GPU to give to unsloth", rich_help_panel="Training Config"),
     ] = 0.6,
-    seed: Annotated[
-        int, Option(help="random seed", rich_help_panel="Training Config")
-    ] = 1234,
-    batch_size: Annotated[
-        int, Option(help="batch size", rich_help_panel="Training Config")
-    ] = 4,
+    seed: Annotated[int, Option(help="random seed", rich_help_panel="Training Config")] = 1234,
+    batch_size: Annotated[int, Option(help="batch size", rich_help_panel="Training Config")] = 4,
     # fmt:on
 ):
     model, tokenizer = load_model(
@@ -553,9 +468,7 @@ def test(
     )
     collator = CustomCollator(tokenizer=tokenizer, mlm=False)
     is_chat_model = "instruct" in model_name.lower()
-    test_data = load_data(
-        dataset, tokenizer, max_tokens=max_tokens, use_chat_template=is_chat_model
-    )
+    test_data = load_data(dataset, tokenizer, max_tokens=max_tokens, use_chat_template=is_chat_model)
     trainer = FormalAlignTrainer(
         model=model,
         processing_class=tokenizer,
@@ -573,44 +486,24 @@ def test(
         with open(Path(output_dir, f"{split}_metrics.json"), "w") as f:
             json.dump(metrics, f)
         with open(Path(output_dir, f"{split}_outputs.pkl"), "wb") as f:
-            pickle.dump(
-                {"label": labels, "cert_score": cert_score, "sim_score": sim_score}, f
-            )
-        df = pd.DataFrame(
-            {"label": labels, "cert_score": cert_score, "sim_score": sim_score}
-        )
+            pickle.dump({"label": labels, "cert_score": cert_score, "sim_score": sim_score}, f)
+        df = pd.DataFrame({"label": labels, "cert_score": cert_score, "sim_score": sim_score})
         df.to_json(Path(output_dir, f"{split}_preds.json"))
 
 
 @app.command()
 def predict_herald(
-    model_name: Annotated[
-        str, Option(help="path to model to test", rich_help_panel="Model Config")
-    ],
-    dataset: Annotated[
-        str, Option(help="path to datasets to test", rich_help_panel="Data Config")
-    ],
-    output_json: Annotated[
-        str, Option(help="path to output json", rich_help_panel="Data Config")
-    ],
-    max_tokens: Annotated[
-        int, Option(help="max tokens", rich_help_panel="Training Config")
-    ] = 2048,
+    model_name: Annotated[str, Option(help="path to model to test", rich_help_panel="Model Config")],
+    dataset: Annotated[str, Option(help="path to datasets to test", rich_help_panel="Data Config")],
+    output_json: Annotated[str, Option(help="path to output json", rich_help_panel="Data Config")],
+    max_tokens: Annotated[int, Option(help="max tokens", rich_help_panel="Training Config")] = 2048,
     gpu_memory_utilization: Annotated[
         float,
-        Option(
-            help="percent of GPU to give to unsloth", rich_help_panel="Training Config"
-        ),
+        Option(help="percent of GPU to give to unsloth", rich_help_panel="Training Config"),
     ] = 0.6,
-    seed: Annotated[
-        int, Option(help="random seed", rich_help_panel="Training Config")
-    ] = 1234,
-    batch_size: Annotated[
-        int, Option(help="batch size", rich_help_panel="Training Config")
-    ] = 4,
-    num_samples: Annotated[
-        int, Option(help="num samples", rich_help_panel="Training Config")
-    ] = -1,
+    seed: Annotated[int, Option(help="random seed", rich_help_panel="Training Config")] = 1234,
+    batch_size: Annotated[int, Option(help="batch size", rich_help_panel="Training Config")] = 4,
+    num_samples: Annotated[int, Option(help="num samples", rich_help_panel="Training Config")] = -1,
 ):
     model, tokenizer = load_model(
         model_name,
@@ -653,15 +546,9 @@ def predict_herald(
         for i, stm in enumerate(statements):
             fl = stm.split("-/")[-1].split("sorry")[0].strip()
             fl_filtered = "\n".join(
-                [
-                    line
-                    for line in fl.splitlines()
-                    if not (line.startswith("import") or line.startswith("open"))
-                ]
+                [line for line in fl.splitlines() if not (line.startswith("import") or line.startswith("open"))]
             ).strip()
-            examples.append(
-                {"index": example["name"], "input": nl, "output": fl_filtered}
-            )
+            examples.append({"index": example["name"], "input": nl, "output": fl_filtered})
         return examples
 
     df["examples"] = df.apply(lambda row: format_example(row), axis=1)
@@ -726,25 +613,15 @@ def predict_herald(
     # Accelerate gather
     records = gather(records)
     if distributed_state.is_main_process:
-        certs = [
-            x.cpu().item()
-            for x in collapse([rec["certainty_score"] for rec in records])
-        ]
-        sims = [
-            x.cpu().item()
-            for x in collapse([rec["similarity_score"] for rec in records])
-        ]
+        certs = [x.cpu().item() for x in collapse([rec["certainty_score"] for rec in records])]
+        sims = [x.cpu().item() for x in collapse([rec["similarity_score"] for rec in records])]
 
         df["certainty_score"] = certs
         df["similarity_score"] = sims
         df["score"] = (df["certainty_score"] + df["similarity_score"]) / 2
         df["aligned"] = df["score"] > 0.5
 
-        df = (
-            df.groupby("informal_statement")
-            .agg(list)
-            .reset_index(names=["informal_statement"])
-        )
+        df = df.groupby("informal_statement").agg(list).reset_index(names=["informal_statement"])
         df = df[
             [
                 "informal_statement",
