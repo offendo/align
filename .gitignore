@@ -8,3 +8,8 @@ wheels/
 
 # venv
 .venv
+.envrc
+
+# data
+misaligned_mathlib_v4.18.0/
+
