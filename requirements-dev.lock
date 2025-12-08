@@ -11,24 +11,40 @@
 
 -e file:.
 accelerate==1.11.0
-    # via align
     # via peft
     # via trl
+    # via unsloth
+    # via unsloth-zoo
 aiohappyeyeballs==2.6.1
     # via aiohttp
 aiohttp==3.13.2
     # via fsspec
+    # via vllm
 aiosignal==1.4.0
     # via aiohttp
+annotated-doc==0.0.4
+    # via fastapi
+annotated-types==0.7.0
+    # via pydantic
+anthropic==0.71.0
+    # via vllm
 anyio==4.11.0
+    # via anthropic
     # via httpx
     # via jupyter-server
+    # via openai
+    # via starlette
+    # via watchfiles
+apache-tvm-ffi==0.1.4
+    # via flashinfer-python
 argon2-cffi==25.1.0
     # via jupyter-server
 argon2-cffi-bindings==25.1.0
     # via argon2-cffi
 arrow==1.4.0
     # via isoduration
+astor==0.8.1
+    # via depyf
 asttokens==3.0.1
     # via stack-data
 async-lru==2.0.5
@@ -41,72 +57,160 @@ babel==2.17.0
     # via jupyterlab-server
 beautifulsoup4==4.14.2
     # via nbconvert
+bitsandbytes==0.48.2
+    # via unsloth
+blake3==1.0.8
+    # via vllm
 bleach==6.3.0
     # via nbconvert
+cachetools==6.2.2
+    # via vllm
+cbor2==5.7.1
+    # via vllm
 certifi==2025.11.12
     # via httpcore
     # via httpx
     # via requests
+    # via sentry-sdk
 cffi==2.0.0
     # via argon2-cffi-bindings
 charset-normalizer==3.4.4
     # via requests
-click==8.3.1
+click==8.2.1
+    # via flashinfer-python
+    # via ray
+    # via rich-toolkit
     # via typer
+    # via uvicorn
+cloudpickle==3.1.2
+    # via vllm
 comm==0.2.3
     # via ipykernel
     # via ipywidgets
-datasets==4.4.1
-    # via align
+compressed-tensors==0.12.2
+    # via vllm
+cuda-bindings==13.0.3
+    # via cuda-python
+cuda-pathfinder==1.3.2
+    # via cuda-bindings
+    # via cuda-python
+cuda-python==13.0.3
+    # via nvidia-cutlass-dsl
+cupy-cuda12x==13.6.0
+    # via ray
+cut-cross-entropy==25.1.1
+    # via unsloth-zoo
+datasets==4.3.0
     # via trl
+    # via unsloth
+    # via unsloth-zoo
 debugpy==1.8.17
     # via ipykernel
 decorator==5.2.1
     # via ipython
 defusedxml==0.7.1
     # via nbconvert
+depyf==0.20.0
+    # via vllm
+diffusers==0.35.2
+    # via unsloth
 dill==0.4.0
     # via datasets
+    # via depyf
     # via multiprocess
+diskcache==5.6.3
+    # via vllm
+distro==1.9.0
+    # via anthropic
+    # via openai
+dnspython==2.8.0
+    # via email-validator
+docstring-parser==0.17.0
+    # via anthropic
+    # via tyro
+einops==0.8.1
+    # via flashinfer-python
+    # via vllm
+email-validator==2.3.0
+    # via fastapi
+    # via pydantic
 executing==2.2.1
     # via stack-data
+fastapi==0.123.5
+    # via model-hosting-container-standards
+    # via vllm
+fastapi-cli==0.0.16
+    # via fastapi
+fastapi-cloud-cli==0.5.2
+    # via fastapi-cli
+fastar==0.8.0
+    # via fastapi-cloud-cli
 fastjsonschema==2.21.2
     # via nbformat
+fastrlock==0.8.3
+    # via cupy-cuda12x
 filelock==3.20.0
     # via datasets
+    # via diffusers
     # via huggingface-hub
+    # via ray
     # via torch
     # via transformers
+    # via unsloth-zoo
+    # via vllm
+flashinfer-python==0.5.3
+    # via vllm
 fqdn==1.5.1
     # via jsonschema
 frozenlist==1.8.0
     # via aiohttp
     # via aiosignal
-fsspec==2025.10.0
+fsspec==2025.9.0
     # via datasets
     # via huggingface-hub
     # via torch
+gguf==0.17.1
+    # via vllm
 h11==0.16.0
     # via httpcore
+    # via uvicorn
+hf-transfer==0.1.9
+    # via unsloth
+    # via unsloth-zoo
 hf-xet==1.2.0
     # via huggingface-hub
 httpcore==1.0.9
     # via httpx
+httptools==0.7.1
+    # via uvicorn
 httpx==0.28.1
+    # via anthropic
     # via datasets
+    # via fastapi
+    # via fastapi-cloud-cli
     # via jupyterlab
+    # via model-hosting-container-standards
+    # via openai
 huggingface-hub==0.36.0
     # via accelerate
     # via datasets
+    # via diffusers
     # via peft
     # via tokenizers
     # via transformers
+    # via unsloth
+    # via unsloth-zoo
 idna==3.11
     # via anyio
+    # via email-validator
     # via httpx
     # via jsonschema
     # via requests
     # via yarl
+importlib-metadata==8.7.0
+    # via diffusers
+interegular==0.3.3
+    # via lm-format-enforcer
 ipykernel==7.1.0
     # via jupyter
     # via jupyter-console
@@ -124,11 +228,17 @@ isoduration==20.11.0
 jedi==0.19.2
     # via ipython
 jinja2==3.1.6
+    # via fastapi
     # via jupyter-server
     # via jupyterlab
     # via jupyterlab-server
     # via nbconvert
     # via torch
+jiter==0.12.0
+    # via anthropic
+    # via openai
+jmespath==1.0.1
+    # via model-hosting-container-standards
 joblib==1.5.2
     # via scikit-learn
 json5==0.12.1
@@ -138,7 +248,9 @@ jsonpointer==3.0.0
 jsonschema==4.25.1
     # via jupyter-events
     # via jupyterlab-server
+    # via mistral-common
     # via nbformat
+    # via ray
 jsonschema-specifications==2025.9.1
     # via jsonschema
 jupyter==1.1.1
@@ -180,8 +292,17 @@ jupyterlab-server==2.28.0
     # via notebook
 jupyterlab-widgets==3.0.16
     # via ipywidgets
-lark==1.3.1
+lark==1.2.2
     # via rfc3987-syntax
+    # via vllm
+llguidance==1.3.0
+    # via vllm
+llvmlite==0.44.0
+    # via numba
+lm-format-enforcer==0.11.3
+    # via vllm
+loguru==0.7.3
+    # via compressed-tensors
 markdown-it-py==4.0.0
     # via rich
 markupsafe==3.0.3
@@ -192,17 +313,25 @@ matplotlib-inline==0.2.1
     # via ipython
 mdurl==0.1.2
     # via markdown-it-py
+mistral-common==1.8.6
+    # via vllm
 mistune==3.1.4
     # via nbconvert
+model-hosting-container-standards==0.1.9
+    # via vllm
 more-itertools==10.8.0
     # via align
-    # via pyle
 mpmath==1.3.0
     # via sympy
+msgpack==1.1.2
+    # via ray
+msgspec==0.20.0
+    # via unsloth-zoo
+    # via vllm
 multidict==6.7.0
     # via aiohttp
     # via yarl
-multiprocess==0.70.18
+multiprocess==0.70.16
     # via datasets
 nbclient==0.10.2
     # via nbconvert
@@ -217,19 +346,40 @@ nest-asyncio==1.6.0
     # via ipykernel
 networkx==3.5
     # via torch
+ninja==1.13.0
+    # via flashinfer-python
+    # via vllm
+    # via xgrammar
 notebook==7.4.7
     # via jupyter
 notebook-shim==0.2.4
     # via jupyterlab
     # via notebook
-numpy==2.3.4
+numba==0.61.2
+    # via vllm
+numpy==2.2.6
     # via accelerate
+    # via bitsandbytes
+    # via cupy-cuda12x
     # via datasets
+    # via diffusers
+    # via flashinfer-python
+    # via gguf
+    # via mistral-common
+    # via numba
+    # via nvidia-cutlass-dsl
+    # via opencv-python-headless
     # via pandas
     # via peft
     # via scikit-learn
     # via scipy
+    # via torchvision
     # via transformers
+    # via unsloth
+    # via unsloth-zoo
+    # via vllm
+    # via xformers
+    # via xgrammar
 nvidia-cublas-cu12==12.8.4.1
     # via nvidia-cudnn-cu12
     # via nvidia-cusolver-cu12
@@ -242,6 +392,8 @@ nvidia-cuda-runtime-cu12==12.8.90
     # via torch
 nvidia-cudnn-cu12==9.10.2.21
     # via torch
+nvidia-cudnn-frontend==1.16.0
+    # via flashinfer-python
 nvidia-cufft-cu12==11.3.3.83
     # via torch
 nvidia-cufile-cu12==1.13.1.3
@@ -255,6 +407,10 @@ nvidia-cusparse-cu12==12.5.8.93
     # via torch
 nvidia-cusparselt-cu12==0.7.1
     # via torch
+nvidia-cutlass-dsl==4.3.1
+    # via flashinfer-python
+nvidia-ml-py==13.580.82
+    # via flashinfer-python
 nvidia-nccl-cu12==2.27.5
     # via torch
 nvidia-nvjitlink-cu12==12.8.93
@@ -266,18 +422,33 @@ nvidia-nvshmem-cu12==3.3.20
     # via torch
 nvidia-nvtx-cu12==12.8.90
     # via torch
+openai==2.8.1
+    # via vllm
+openai-harmony==0.0.8
+    # via vllm
+opencv-python-headless==4.12.0.88
+    # via mistral-common
+    # via vllm
+outlines-core==0.2.11
+    # via vllm
 packaging==25.0
     # via accelerate
+    # via bitsandbytes
     # via datasets
+    # via flashinfer-python
     # via huggingface-hub
     # via ipykernel
     # via jupyter-events
     # via jupyter-server
     # via jupyterlab
     # via jupyterlab-server
+    # via lm-format-enforcer
     # via nbconvert
     # via peft
+    # via ray
     # via transformers
+    # via unsloth
+    # via unsloth-zoo
 pandas==2.3.3
     # via align
     # via datasets
@@ -285,72 +456,137 @@ pandocfilters==1.5.1
     # via nbconvert
 parso==0.8.5
     # via jedi
+partial-json-parser==0.2.1.1.post7
+    # via vllm
 peft==0.18.0
-    # via align
+    # via unsloth
+    # via unsloth-zoo
 pexpect==4.9.0
     # via ipython
+pillow==12.0.0
+    # via diffusers
+    # via mistral-common
+    # via torchvision
+    # via unsloth-zoo
+    # via vllm
 platformdirs==4.5.0
     # via jupyter-core
 prometheus-client==0.23.1
     # via jupyter-server
+    # via prometheus-fastapi-instrumentator
+    # via vllm
+prometheus-fastapi-instrumentator==7.1.0
+    # via vllm
 prompt-toolkit==3.0.52
     # via ipython
     # via jupyter-console
 propcache==0.4.1
     # via aiohttp
     # via yarl
+protobuf==6.33.1
+    # via ray
+    # via unsloth
+    # via unsloth-zoo
+    # via vllm
 psutil==7.1.3
     # via accelerate
     # via ipykernel
     # via peft
+    # via unsloth
+    # via unsloth-zoo
+    # via vllm
 ptyprocess==0.7.0
     # via pexpect
     # via terminado
 pure-eval==0.2.3
     # via stack-data
+py-cpuinfo==9.0.0
+    # via vllm
 pyarrow==22.0.0
     # via datasets
+pybase64==1.4.2
+    # via vllm
+pycountry==24.6.1
+    # via pydantic-extra-types
 pycparser==2.23
     # via cffi
+pydantic==2.12.5
+    # via anthropic
+    # via compressed-tensors
+    # via fastapi
+    # via fastapi-cloud-cli
+    # via lm-format-enforcer
+    # via mistral-common
+    # via model-hosting-container-standards
+    # via openai
+    # via openai-harmony
+    # via pydantic-extra-types
+    # via vllm
+    # via xgrammar
+pydantic-core==2.41.5
+    # via pydantic
+pydantic-extra-types==2.10.6
+    # via mistral-common
 pygments==2.19.2
     # via ipython
     # via ipython-pygments-lexers
     # via jupyter-console
     # via nbconvert
     # via rich
-pyle @ git+https://github.com/offendo/pyle@8e43e69ab65bf107fef4dd7366e7ab86454ed31d
-    # via align
 python-dateutil==2.9.0.post0
     # via arrow
     # via jupyter-client
     # via pandas
+python-dotenv==1.2.1
+    # via uvicorn
 python-json-logger==4.0.0
     # via jupyter-events
+    # via vllm
+python-multipart==0.0.20
+    # via fastapi
 pytz==2025.2
     # via pandas
 pyyaml==6.0.3
     # via accelerate
     # via datasets
+    # via gguf
     # via huggingface-hub
     # via jupyter-events
+    # via lm-format-enforcer
     # via peft
+    # via ray
     # via transformers
+    # via uvicorn
+    # via vllm
 pyzmq==27.1.0
     # via ipykernel
     # via jupyter-client
     # via jupyter-console
     # via jupyter-server
+    # via vllm
+ray==2.52.1
+    # via vllm
 referencing==0.37.0
     # via jsonschema
     # via jsonschema-specifications
     # via jupyter-events
 regex==2025.11.3
+    # via diffusers
+    # via tiktoken
     # via transformers
+    # via unsloth-zoo
+    # via vllm
 requests==2.32.5
     # via datasets
+    # via diffusers
+    # via flashinfer-python
     # via huggingface-hub
     # via jupyterlab-server
+    # via mistral-common
+    # via ray
+    # via tiktoken
     # via transformers
+    # via vllm
 rfc3339-validator==0.1.4
     # via jsonschema
     # via jupyter-events
@@ -360,49 +596,102 @@ rfc3986-validator==0.1.1
 rfc3987-syntax==1.1.0
     # via jsonschema
 rich==14.2.0
+    # via rich-toolkit
     # via typer
+    # via tyro
+rich-toolkit==0.17.0
+    # via fastapi-cli
+    # via fastapi-cloud-cli
+rignore==0.7.6
+    # via fastapi-cloud-cli
 rpds-py==0.29.0
     # via jsonschema
     # via referencing
 safetensors==0.6.2
     # via accelerate
+    # via diffusers
     # via peft
     # via transformers
 scikit-learn==1.7.2
     # via align
 scipy==1.16.3
     # via scikit-learn
+    # via vllm
 send2trash==1.8.3
     # via jupyter-server
+sentencepiece==0.2.1
+    # via unsloth
+    # via unsloth-zoo
+    # via vllm
+sentry-sdk==2.47.0
+    # via fastapi-cloud-cli
+setproctitle==1.3.7
+    # via vllm
 setuptools==80.9.0
     # via jupyterlab
+    # via model-hosting-container-standards
     # via torch
+    # via vllm
 shellingham==1.5.4
     # via typer
+shtab==1.8.0
+    # via tyro
 six==1.17.0
     # via python-dateutil
     # via rfc3339-validator
+    # via vllm
 sniffio==1.3.1
+    # via anthropic
     # via anyio
+    # via openai
 soupsieve==2.8
     # via beautifulsoup4
 stack-data==0.6.3
     # via ipython
+starlette==0.50.0
+    # via fastapi
+    # via model-hosting-container-standards
+    # via prometheus-fastapi-instrumentator
+supervisor==4.3.0
+    # via model-hosting-container-standards
 sympy==1.14.0
     # via torch
+tabulate==0.9.0
+    # via flashinfer-python
 terminado==0.18.1
     # via jupyter-server
     # via jupyter-server-terminals
 threadpoolctl==3.6.0
     # via scikit-learn
+tiktoken==0.12.0
+    # via mistral-common
+    # via vllm
 tinycss2==1.4.0
     # via bleach
 tokenizers==0.22.1
     # via transformers
-torch==2.9.1
+    # via vllm
+torch==2.9.0
     # via accelerate
-    # via align
+    # via bitsandbytes
+    # via compressed-tensors
+    # via cut-cross-entropy
+    # via flashinfer-python
     # via peft
+    # via torchaudio
+    # via torchvision
+    # via unsloth
+    # via unsloth-zoo
+    # via vllm
+    # via xformers
+    # via xgrammar
+torchao==0.14.1
+    # via unsloth-zoo
+torchaudio==2.9.0
+    # via vllm
+torchvision==0.24.0
+    # via unsloth
+    # via vllm
 tornado==6.5.2
     # via ipykernel
     # via jupyter-client
@@ -411,11 +700,16 @@ tornado==6.5.2
     # via notebook
     # via terminado
 tqdm==4.67.1
-    # via align
     # via datasets
+    # via flashinfer-python
+    # via gguf
     # via huggingface-hub
+    # via openai
     # via peft
     # via transformers
+    # via unsloth
+    # via unsloth-zoo
+    # via vllm
 traitlets==5.14.3
     # via ipykernel
     # via ipython
@@ -430,28 +724,78 @@ traitlets==5.14.3
     # via nbclient
     # via nbconvert
     # via nbformat
-transformers==4.57.1
-    # via align
+transformers==4.57.2
+    # via compressed-tensors
     # via peft
     # via trl
-triton==3.5.1
+    # via unsloth
+    # via unsloth-zoo
+    # via vllm
+    # via xgrammar
+triton==3.5.0
+    # via cut-cross-entropy
     # via torch
-trl==0.25.1
-    # via align
+    # via unsloth
+    # via unsloth-zoo
+    # via xgrammar
+trl==0.24.0
+    # via unsloth
+    # via unsloth-zoo
+typeguard==4.4.4
+    # via tyro
 typer==0.20.0
-    # via align
+    # via fastapi-cli
+    # via fastapi-cloud-cli
 typing-extensions==4.15.0
+    # via anthropic
+    # via apache-tvm-ffi
     # via beautifulsoup4
+    # via fastapi
     # via huggingface-hub
+    # via mistral-common
+    # via nvidia-cutlass-dsl
+    # via openai
+    # via pydantic
+    # via pydantic-core
+    # via pydantic-extra-types
+    # via rich-toolkit
     # via torch
+    # via typeguard
     # via typer
+    # via typing-inspection
+    # via tyro
+    # via unsloth-zoo
+    # via vllm
+    # via xgrammar
+typing-inspection==0.4.2
+    # via pydantic
+tyro==0.9.35
+    # via unsloth
+    # via unsloth-zoo
 tzdata==2025.2
     # via arrow
     # via pandas
+unsloth==2025.11.6
+    # via align
+unsloth-zoo==2025.11.6
+    # via align
+    # via unsloth
 uri-template==1.3.0
     # via jsonschema
 urllib3==2.5.0
     # via requests
+    # via sentry-sdk
+uvicorn==0.38.0
+    # via fastapi
+    # via fastapi-cli
+    # via fastapi-cloud-cli
+uvloop==0.22.1
+    # via uvicorn
+vllm==0.12.0
+    # via align
+watchfiles==1.1.1
+    # via uvicorn
+    # via vllm
 wcwidth==0.2.14
     # via prompt-toolkit
 webcolors==25.10.0
@@ -461,9 +805,20 @@ webencodings==0.5.1
     # via tinycss2
 websocket-client==1.9.0
     # via jupyter-server
+websockets==15.0.1
+    # via uvicorn
+wheel==0.45.1
+    # via unsloth
+    # via unsloth-zoo
 widgetsnbextension==4.0.15
     # via ipywidgets
+xformers==0.0.33.post1
+    # via unsloth
+xgrammar==0.1.27
+    # via vllm
 xxhash==3.6.0
     # via datasets
 yarl==1.22.0
     # via aiohttp
+zipp==3.23.0
+    # via importlib-metadata

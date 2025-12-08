@@ -12,4 +12,6 @@ wheels/
 
 # data
 misaligned_mathlib_v4.18.0/
-
+unsloth_compiled_cache/
+alignment_classifier/
+data/
