@@ -1,3 +1,9 @@
+import argparse
+import random
+import pandas as pd
+from collections import defaultdict
+from sklearn.model_selection import train_test_split
+
 # ============================================================
 # SYSTEM PROMPT
 # ============================================================
@@ -7,12 +13,12 @@ You are a classifier. You are given a pair of statements:
 1. An **informal** natural-language mathematical description.
 2. A **formal** mathematical translation of that description.
 
-Your task is to output **only one token**: either `"correct"` or `"incorrect"`.
+Your task is to output **only one token**: either `"aligned"` or `"distinct"`.
 
-- Output `"correct"` if the formal translation faithfully and accurately matches the informal description.
-- Output `"incorrect"` if the formal statement does not correspond to the informal description.
+- Output `"aligned"` if the formal translation faithfully and accurately matches the informal description.
+- Output `"distinct"` if the formal statement does not correspond to the informal description.
 
-Do NOT explain your answer. Output strictly `"correct"` or `"incorrect"`.
+Do NOT explain your answer. Output strictly `"aligned"` or `"distinct"`.
 """.strip()
 
 
@@ -30,7 +36,7 @@ def make_conversations(example, training: bool = False):
         f"{example['formal']}\n\n"
         "Informal explanation:\n"
         f"{example['informal']}\n\n"
-        "Are they aligned? Respond with 'correct' or 'incorrect'."
+        "Are they aligned? Respond with 'aligned' if they are aligned, or 'distinct' if not."
     )
 
     # Convert label to textual answer
@@ -42,43 +48,88 @@ def make_conversations(example, training: bool = False):
         ]
     }
     if training:
-        label = "correct" if example["label"] == 1 else "incorrect"
+        label = "aligned" if example["label"] else "distinct"
         msgs['messages'].append({"role": "assistant", "content": label})
     return msgs
 
 
-# ============================================================
-# GROUP–WISE TRAIN/VAL SPLIT (NO ID LEAKAGE)
-# ============================================================
-def grouped_train_test_split(ds, val_ratio=0.02, seed=42):
+def split_by_module(df, module_col="modules", test_size=0.2, random_state=None):
     """
-    Ensures that all items with the same ID stay in the same split.
+    Split a dataframe into train and test such that all rows with the same
+    module value appear entirely in either split.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Input dataframe.
+    module_col : str
+        Column whose unique values define the grouping.
+    test_size : float
+        Fraction of modules to assign to the test split.
+    random_state : int or None
+        Seed for reproducibility.
+
+    Returns
+    -------
+    df_train : pd.DataFrame
+    df_test : pd.DataFrame
     """
+    # Unique modules
+    modules = df[module_col].unique()
 
-    # Group rows by ID
-    grouped = defaultdict(list)
-    for i, row in enumerate(ds):
-        grouped[row["id"]].append(i)
-
-    all_ids = list(grouped.keys())
-    random.Random(seed).shuffle(all_ids)
-
-    n_val = int(len(all_ids) * val_ratio)
-    val_ids = set(all_ids[:n_val])
-    train_ids = set(all_ids[n_val:])
-
-    train_indices, val_indices = [], []
-
-    for id_, idxs in grouped.items():
-        if id_ in train_ids:
-            train_indices.extend(idxs)
-        else:
-            val_indices.extend(idxs)
-
-    return (
-        ds.select(train_indices),
-        ds.select(val_indices)
+    # Split modules into train/test
+    train_modules, test_modules = train_test_split(
+        modules,
+        test_size=test_size,
+        random_state=random_state
     )
+
+    # Select rows belonging to those module sets
+    df_train = df[df[module_col].isin(train_modules)].copy()
+    df_test = df[df[module_col].isin(test_modules)].copy()
+
+    return df_train, df_test
+
+def split_by_module_hf(dataset, module_col="modules", test_size=0.2, seed=None):
+    """
+    Split a HuggingFace dataset into train and test such that all rows with the
+    same module value appear entirely in either split.
+
+    Parameters
+    ----------
+    dataset : datasets.Dataset
+        The input dataset.
+    module_col : str
+        Column whose unique values define grouping.
+    test_size : float
+        Fraction of modules to put in the test split.
+    seed : int or None
+        Optional RNG seed for reproducibility.
+
+    Returns
+    -------
+    train_ds : datasets.Dataset
+    test_ds : datasets.Dataset
+    """
+
+    # Get unique module labels
+    modules = list(set(dataset[module_col]))
+
+    # Shuffle modules reproducibly
+    rng = random.Random(seed)
+    rng.shuffle(modules)
+
+    # Compute split point
+    n_test = int(len(modules) * test_size)
+    test_modules = set(modules[:n_test])
+    train_modules = set(modules[n_test:])
+
+    # Filter entire dataset based on module membership
+    train_ds = dataset.filter(lambda x: x[module_col] in train_modules)
+    test_ds = dataset.filter(lambda x: x[module_col] in test_modules)
+
+    return train_ds, test_ds
+
 
 def formatting_func(tokenizer, example, training: bool = False):
     return tokenizer.apply_chat_template(
@@ -127,8 +178,8 @@ def main():
     processed_ds = raw_ds.map(lambda ex: make_conversations(ex, training=True))
     processed_ds = processed_ds.map(lambda batch: {'text': formatting_func(tokenizer, batch, training=True)}, batched=True)
 
-    # Split without ID leakage
-    train_ds, val_ds = grouped_train_test_split(processed_ds)
+    # Split without Module leakage
+    train_ds, val_ds = split_by_module(processed_ds)
 
     # ------------------------------------------------------------
     # Training configuration
@@ -173,10 +224,7 @@ def main():
 
 if __name__ == "__main__":
     from unsloth import FastLanguageModel
-    import argparse
-    from datasets import load_dataset, DatasetDict
+    from datasets import load_dataset, DatasetDict, Dataset
     from trl import SFTTrainer, SFTConfig
-    import random
-    from collections import defaultdict
 
     main()
