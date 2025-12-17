@@ -8,18 +8,17 @@ from vllm import LLM, SamplingParams
 from more_itertools import chunked
 from transformers import AutoTokenizer
 from train_binary import make_conversations, SYSTEM_PROMPT, formatting_func
-from sklearn.metrics import accuracy_score, f1_score
+from sklearn.metrics import accuracy_score, f1_score, classification_report
 
 if __name__ == "__main__":
     # -----------------------------
     # Config
     # -----------------------------
-    MODEL_PATH = Path("alignment_classifier_filtered_bleu/checkpoint-5000/")
-    TOKENIZER_PATH = Path("alignment_classifier_filtered_bleu/tokenizer")
-    SYSTEM_PROMPT_PATH = "aligner_prompt.txt"
+    MODEL_PATH = Path("alignment_classifier/checkpoint-1000/")
+    TOKENIZER_PATH = "Qwen/Qwen3-4B-Instruct-2507"
     # DATA_PATH = Path("data/minif2f_test_formatted.json")
-    DATA_PATH = Path("mathatlas_30_benchmark.jsonl")
-    FINAL_OUTPUT_PATH = Path(MODEL_PATH, DATA_PATH.name)
+    DATA_PATH = "offendo/math-atlas-alignment-3600"
+    FINAL_OUTPUT_PATH = Path(MODEL_PATH, str(DATA_PATH).split('/')[-1])
     Path(FINAL_OUTPUT_PATH).parent.mkdir(exist_ok=True, parents=True)
 
 
@@ -30,7 +29,7 @@ if __name__ == "__main__":
     if Path(DATA_PATH).exists():
         ds = load_dataset('json', data_files=[str(DATA_PATH)], split='train')
     else:
-        ds = load_dataset(str(DATA_PATH), split="val")
+        ds = load_dataset(str(DATA_PATH), split="test")
     ds = ds.map(make_conversations, load_from_cache_file=False)
     ds = ds.map(lambda batch: {'text': formatting_func(tokenizer, batch)}, batched=True, load_from_cache_file=False)
     prompts = list(ds['text'])
@@ -54,13 +53,12 @@ if __name__ == "__main__":
     results = []
     for record, out in zip(ds, outputs):
         results.append({
-            "kind": record['kind'],
-            "formal": record['formal'],
+            "formal": record.get('formal_no_comments', record.get('formal')), # default to formal
             "informal": record['informal'],
             "prompt": record['text'],
             "pred": out.outputs[0].text,
-            "pred_label": False if "distinct" in out.outputs[0].text else True,
-            "label": record['label'],
+            "pred_label": False if "misaligned" in out.outputs[0].text.split()[-1].strip() else True,
+            "label": record['label'] == 'aligned',
         })
 
     # -----------------------------
@@ -69,10 +67,7 @@ if __name__ == "__main__":
     outdf = pd.DataFrame.from_records(results)
     outdf.to_json(FINAL_OUTPUT_PATH)
     
-    acc = accuracy_score(outdf['label'], outdf["pred_label"])
-    f1 = f1_score(outdf['label'], outdf["pred_label"], average='macro')
-    print('Accuracy: ', acc)
-    print('F1: ', f1)
+    print(classification_report(outdf['label'], outdf["pred_label"], target_names=['misaligned', 'aligned']))
 
     total_time = time.time() - start_time
     print(f"\nDone! Saved {len(results)} results.")

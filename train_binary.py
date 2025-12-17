@@ -1,8 +1,11 @@
 import argparse
 import random
+import numpy as np
 import pandas as pd
+import re
 from collections import defaultdict
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import precision_recall_fscore_support, accuracy_score, classification_report
 
 # ============================================================
 # SYSTEM PROMPT
@@ -13,12 +16,10 @@ You are a classifier. You are given a pair of statements:
 1. An **informal** natural-language mathematical description.
 2. A **formal** mathematical translation of that description.
 
-Your task is to output **only one token**: either `"aligned"` or `"distinct"`.
+Your task is to output either `"aligned"` or `"misaligned"`.
 
 - Output `"aligned"` if the formal translation faithfully and accurately matches the informal description.
-- Output `"distinct"` if the formal statement does not correspond to the informal description.
-
-Do NOT explain your answer. Output strictly `"aligned"` or `"distinct"`.
+- Output `"misaligned"` if the formal statement does not correspond to the informal description.
 """.strip()
 
 
@@ -32,11 +33,10 @@ def make_conversations(example, training: bool = False):
 
     # Build user message
     user_msg = (
-        "Formal statement:\n"
-        f"{example['formal']}\n\n"
-        "Informal explanation:\n"
+        "Informal:\n"
         f"{example['informal']}\n\n"
-        "Are they aligned? Respond with 'aligned' if they are aligned, or 'distinct' if not."
+        "Formal:\n"
+        f"{example['formal_no_comments']}\n\n"
     )
 
     # Convert label to textual answer
@@ -48,103 +48,61 @@ def make_conversations(example, training: bool = False):
         ]
     }
     if training:
-        label = "aligned" if example["label"] else "distinct"
-        msgs['messages'].append({"role": "assistant", "content": label})
+        msgs['messages'].append({"role": "assistant", "content": example['label']})
     return msgs
-
-
-def split_by_module(df, module_col="modules", test_size=0.2, random_state=None):
-    """
-    Split a dataframe into train and test such that all rows with the same
-    module value appear entirely in either split.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Input dataframe.
-    module_col : str
-        Column whose unique values define the grouping.
-    test_size : float
-        Fraction of modules to assign to the test split.
-    random_state : int or None
-        Seed for reproducibility.
-
-    Returns
-    -------
-    df_train : pd.DataFrame
-    df_test : pd.DataFrame
-    """
-    # Unique modules
-    modules = df[module_col].unique()
-
-    # Split modules into train/test
-    train_modules, test_modules = train_test_split(
-        modules,
-        test_size=test_size,
-        random_state=random_state
-    )
-
-    # Select rows belonging to those module sets
-    df_train = df[df[module_col].isin(train_modules)].copy()
-    df_test = df[df[module_col].isin(test_modules)].copy()
-
-    return df_train, df_test
-
-def split_by_module_hf(dataset, module_col="modules", test_size=0.2, seed=None):
-    """
-    Split a HuggingFace dataset into train and test such that all rows with the
-    same module value appear entirely in either split.
-
-    Parameters
-    ----------
-    dataset : datasets.Dataset
-        The input dataset.
-    module_col : str
-        Column whose unique values define grouping.
-    test_size : float
-        Fraction of modules to put in the test split.
-    seed : int or None
-        Optional RNG seed for reproducibility.
-
-    Returns
-    -------
-    train_ds : datasets.Dataset
-    test_ds : datasets.Dataset
-    """
-
-    # Get unique module labels
-    modules = list(set(dataset[module_col]))
-
-    # Shuffle modules reproducibly
-    rng = random.Random(seed)
-    rng.shuffle(modules)
-
-    # Compute split point
-    n_test = int(len(modules) * test_size)
-    test_modules = set(modules[:n_test])
-    train_modules = set(modules[n_test:])
-
-    # Filter entire dataset based on module membership
-    train_ds = dataset.filter(lambda x: x[module_col] in train_modules)
-    test_ds = dataset.filter(lambda x: x[module_col] in test_modules)
-
-    return train_ds, test_ds
 
 
 def formatting_func(tokenizer, example, training: bool = False):
     return tokenizer.apply_chat_template(
         example["messages"],
         tokenize=False,
-        add_generation_prompt=not training
+        add_generation_prompt=not training,
+        enable_thinking=True,
     )
 
+def make_compute_metrics(tokenizer):
+    def compute_metrics(eval_preds):
+        """
+        Computes exact-match accuracy for generated text.
+        Expected labels: 'aligned' or 'misaligned'
+        """
+        preds, labels = eval_preds
+
+        # Replace -100 in the preds as we can't decode them
+        preds = np.where(labels != -100, preds, tokenizer.pad_token_id)
+        labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
+
+        # If predictions are token IDs (common with generate)
+        preds = tokenizer.batch_decode(preds, skip_special_tokens=True)
+        labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
+
+        # Normalize
+        preds = [int(p.strip().lower().split()[-1] == 'aligned') for p in preds]
+        labels = [int(l.strip().lower().split()[-1] == 'aligned') for l in labels]
+        p,r,f1,_ = precision_recall_fscore_support(labels, preds, average='macro')
+        accuracy = accuracy_score(labels, preds)
+
+        print(classification_report(labels, preds, target_names=['misaligned', 'aligned']))
+
+        return {
+            "accuracy": accuracy,
+            "f1": f1,
+            "precision": p,
+            "recall": r,
+        }
+
+    return compute_metrics
+
+def preprocess_logits_for_metrics(logits, labels):
+    if isinstance(logits, tuple):
+        logits = logits[0]
+    return logits.argmax(dim=-1)
 
 # ============================================================
 # MAIN
 # ============================================================
 def main():
     parser = argparse.ArgumentParser()
-
     # Basic configs
     parser.add_argument("--model_name", type=str, default="Qwen/Qwen3-4B-Instruct-2507")
     parser.add_argument("--dataset_name", type=str, default="offendo/mathlib_v4.18.0_misaligned_by_default")
@@ -153,7 +111,7 @@ def main():
     # Training hyperparameters
     parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--lr", type=float, default=2e-5)
-    parser.add_argument("--max_steps", type=int, default=50000)
+    parser.add_argument("--max_steps", type=int, default=5000)
     parser.add_argument("--warmup_ratio", type=float, default=0.03)
 
     args = parser.parse_args()
@@ -174,12 +132,20 @@ def main():
     # ------------------------------------------------------------
     # Load dataset
     # ------------------------------------------------------------
-    raw_ds = load_dataset(args.dataset_name, split='train')
-    processed_ds = raw_ds.map(lambda ex: make_conversations(ex, training=True))
-    processed_ds = processed_ds.map(lambda batch: {'text': formatting_func(tokenizer, batch, training=True)}, batched=True)
+    raw_ds = load_dataset(args.dataset_name)
+    train_ds = raw_ds['train']
+    test_ds = raw_ds['test']
 
-    # Split without Module leakage
-    train_ds, val_ds = split_by_module(processed_ds)
+    train_ds = train_ds.map(lambda ex: make_conversations(ex, training=True))
+    test_ds = test_ds.map(lambda ex: make_conversations(ex, training=False))
+
+    train_ds = train_ds.map(lambda batch: {'text': formatting_func(tokenizer, batch, training=True)}, batched=True)
+    test_ds = test_ds.map(lambda batch: {'text': formatting_func(tokenizer, batch, training=False)}, batched=True)
+
+
+    print('Example:\n===========================================')
+    print(test_ds[0]['text'])
+    print('===========================================')
 
     # ------------------------------------------------------------
     # Training configuration
@@ -192,15 +158,18 @@ def main():
         max_steps=args.max_steps,
         warmup_ratio=args.warmup_ratio,
         save_strategy="steps",
-        save_steps=5000,
+        save_steps=500,
         eval_strategy="steps",
-        eval_steps=5000,
+        eval_steps=100,
         logging_steps=10,
         gradient_accumulation_steps=1,
         report_to="none",
         assistant_only_loss=True,
         eos_token=tokenizer.eos_token,
         dataset_text_field="text",
+        metric_for_best_model="f1",
+        greater_is_better=True,
+        load_best_model_at_end=True,
     )
 
     # ------------------------------------------------------------
@@ -209,8 +178,10 @@ def main():
     trainer = SFTTrainer(
         model=model,
         processing_class=tokenizer,
+        compute_metrics=make_compute_metrics(tokenizer),
+        preprocess_logits_for_metrics=preprocess_logits_for_metrics,
         train_dataset=train_ds,
-        eval_dataset=val_ds,
+        eval_dataset=test_ds,
         args=config,
     )
 
@@ -218,8 +189,8 @@ def main():
     # Training
     # ------------------------------------------------------------
     trainer.train()
-
     trainer.save_model(args.output_dir)
+
 
 
 if __name__ == "__main__":
