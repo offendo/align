@@ -1,11 +1,16 @@
 import argparse
-import random
 import numpy as np
-import pandas as pd
 import re
-from collections import defaultdict
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import precision_recall_fscore_support, accuracy_score, classification_report
+import os
+from sklearn.metrics import (
+    precision_recall_fscore_support,
+    accuracy_score,
+    classification_report,
+)
+
+os.environ["UNSLOTH_COMPILE_DISABLE"] = "1"
+os.environ["UNSLOTH_DISABLE_FAST_GENERATION"] = "1"
+os.environ["UNSLOTH_COMPILE_MAXIMUM"] = "0" 
 
 # ============================================================
 # SYSTEM PROMPT
@@ -20,18 +25,19 @@ Your task is to output either `"aligned"` or `"misaligned"`.
 
 - Output `"aligned"` if the formal translation faithfully and accurately matches the informal description.
 - Output `"misaligned"` if the formal statement does not correspond to the informal description.
+
+Output **only** one word: `aligned` or `misaligned`.
 """.strip()
 
 
 # ============================================================
-# DATA PREPROCESSING → Conversation format
+# DATA PREPROCESSING
 # ============================================================
 def make_conversations(example, training: bool = False):
     """
-    Convert dataset row into conversation format expected by TRL.
+    Convert dataset row into chat format.
+    Also keep gold label as plain text for generation-based eval.
     """
-
-    # Build user message
     user_msg = (
         "Informal:\n"
         f"{example['informal']}\n\n"
@@ -39,53 +45,86 @@ def make_conversations(example, training: bool = False):
         f"{example['formal_no_comments']}\n\n"
     )
 
-    # Convert label to textual answer
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": user_msg},
+    ]
 
-    msgs =  {
-        "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_msg},
-        ]
-    }
     if training:
-        msgs['messages'].append({"role": "assistant", "content": example['label']})
-    return msgs
+        messages.append(
+            {"role": "assistant", "content": example["label"]}
+        )
+
+    return {
+        "messages": messages,
+        "label_text": example["label"].strip().lower(),
+    }
 
 
 def formatting_func(tokenizer, example, training: bool = False):
+    """
+    Apply chat template.
+    - During training: include assistant answer
+    - During eval: add generation prompt
+    """
     return tokenizer.apply_chat_template(
         example["messages"],
         tokenize=False,
         add_generation_prompt=not training,
-        enable_thinking=True,
+        enable_thinking=False,
     )
 
-def make_compute_metrics(tokenizer):
+
+# ============================================================
+# METRICS (GENERATION-BASED)
+# ============================================================
+def normalize_pred(text: str) -> str:
+    text = re.split(r"</think>", text)[-1].strip().lower()
+    if "misaligned" in text:
+        return "misaligned"
+    if "aligned" in text:
+        return "aligned"
+    return "unknown"
+
+def make_compute_metrics(tokenizer, eval_dataset):
     def compute_metrics(eval_preds):
-        """
-        Computes exact-match accuracy for generated text.
-        Expected labels: 'aligned' or 'misaligned'
-        """
-        preds, labels = eval_preds
+        preds = eval_preds.predictions
 
-        # Replace -100 in the preds as we can't decode them
-        preds = np.where(labels != -100, preds, tokenizer.pad_token_id)
-        labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
+        # Decode generated text
+        decoded_preds = tokenizer.batch_decode(
+            np.where(preds != -100, preds, tokenizer.pad_token_id), skip_special_tokens=True
+        )
 
-        # If predictions are token IDs (common with generate)
-        preds = tokenizer.batch_decode(preds, skip_special_tokens=True)
-        labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
+        gold = eval_dataset["label_text"]
 
-        # Normalize
-        preds = [int(p.strip().lower().split()[-1] == 'aligned') for p in preds]
-        labels = [int(l.strip().lower().split()[-1] == 'aligned') for l in labels]
-        p,r,f1,_ = precision_recall_fscore_support(labels, preds, average='macro')
-        accuracy = accuracy_score(labels, preds)
+        y_pred = [normalize_pred(p) for p in decoded_preds]
+        y_true = [g for g in gold]
 
-        print(classification_report(labels, preds, target_names=['misaligned', 'aligned']))
+        label_map = {"misaligned": 0, "aligned": 1}
+
+        y_pred_i = [label_map.get(p, -1) for p in y_pred]
+        y_true_i = [label_map[t] for t in y_true]
+
+        # Drop invalid predictions
+        valid = [i for i, p in enumerate(y_pred_i) if p != -1]
+        y_pred_i = [y_pred_i[i] for i in valid]
+        y_true_i = [y_true_i[i] for i in valid]
+
+        p, r, f1, _ = precision_recall_fscore_support(
+            y_true_i, y_pred_i, average="macro"
+        )
+        acc = accuracy_score(y_true_i, y_pred_i)
+
+        print(
+            classification_report(
+                y_true_i,
+                y_pred_i,
+                target_names=["misaligned", "aligned"],
+            )
+        )
 
         return {
-            "accuracy": accuracy,
+            "accuracy": acc,
             "f1": f1,
             "precision": p,
             "recall": r,
@@ -93,20 +132,44 @@ def make_compute_metrics(tokenizer):
 
     return compute_metrics
 
-def preprocess_logits_for_metrics(logits, labels):
-    if isinstance(logits, tuple):
-        logits = logits[0]
-    return logits.argmax(dim=-1)
+
+def tokenize_fn(tokenizer, training: bool):
+    def _tok(batch):
+        tokenized = tokenizer(
+            batch["text"],
+            truncation=True,
+            padding=False,
+        )
+
+        tokenized["labels"] = tokenized["input_ids"].copy()
+
+        return tokenized
+
+    return _tok
+
 
 # ============================================================
 # MAIN
 # ============================================================
 def main():
     parser = argparse.ArgumentParser()
-    # Basic configs
-    parser.add_argument("--model_name", type=str, default="Qwen/Qwen3-4B-Instruct-2507")
-    parser.add_argument("--dataset_name", type=str, default="offendo/mathlib_v4.18.0_misaligned_by_default")
-    parser.add_argument("--output_dir", type=str, default="./alignment_classifier")
+
+    # Model / data
+    parser.add_argument(
+        "--model_name",
+        type=str,
+        default="Qwen/Qwen3-4B-Instruct-2507",
+    )
+    parser.add_argument(
+        "--dataset_name",
+        type=str,
+        default="offendo/mathlib_v4.18.0_misaligned_by_default",
+    )
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        default="./alignment_classifier",
+    )
 
     # Training hyperparameters
     parser.add_argument("--batch_size", type=int, default=16)
@@ -117,8 +180,10 @@ def main():
     args = parser.parse_args()
 
     # ------------------------------------------------------------
-    # Load model with Unsloth
+    # Load model (Unsloth)
     # ------------------------------------------------------------
+    from unsloth import FastLanguageModel
+
     model, tokenizer = FastLanguageModel.from_pretrained(
         args.model_name,
         load_in_4bit=False,
@@ -126,31 +191,56 @@ def main():
         full_finetuning=True,
         max_seq_length=4096,
     )
+
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.pad_token_id = tokenizer.eos_token_id
 
     # ------------------------------------------------------------
     # Load dataset
     # ------------------------------------------------------------
+    from datasets import load_dataset
+
     raw_ds = load_dataset(args.dataset_name)
-    train_ds = raw_ds['train']
-    test_ds = raw_ds['test']
 
-    train_ds = train_ds.map(lambda ex: make_conversations(ex, training=True))
-    test_ds = test_ds.map(lambda ex: make_conversations(ex, training=False))
+    train_ds = raw_ds["train"].map(
+        lambda ex: make_conversations(ex, training=True),
+        remove_columns=raw_ds["train"].column_names,
+    )
 
-    train_ds = train_ds.map(lambda batch: {'text': formatting_func(tokenizer, batch, training=True)}, batched=True)
-    test_ds = test_ds.map(lambda batch: {'text': formatting_func(tokenizer, batch, training=False)}, batched=True)
+    test_ds = raw_ds["test"].map(
+        lambda ex: make_conversations(ex, training=False),
+        remove_columns=raw_ds["test"].column_names,
+    )
 
-
-    print('Example:\n===========================================')
-    print(test_ds[0]['text'])
-    print('===========================================')
+    train_ds = train_ds.map(
+        lambda ex: {
+            "text": formatting_func(tokenizer, ex, training=True)
+        }
+    )
+    test_ds = test_ds.map(
+        lambda ex: {
+            "text": formatting_func(tokenizer, ex, training=False)
+        }
+    )
+    train_ds = train_ds.map(
+        tokenize_fn(tokenizer, training=True),
+        batched=True,
+    )
+    
+    test_ds = test_ds.map(
+        tokenize_fn(tokenizer, training=False),
+        batched=True,
+    )
+    
 
     # ------------------------------------------------------------
-    # Training configuration
+    # Training config
     # ------------------------------------------------------------
-    config = SFTConfig(
+    from transformers import Seq2SeqTrainer, Seq2SeqTrainingArguments, DataCollatorForSeq2Seq, GenerationConfig
+    data_collator = DataCollatorForSeq2Seq(tokenizer=tokenizer, model=model, padding=True)
+
+
+    training_args = Seq2SeqTrainingArguments(
         output_dir=args.output_dir,
         per_device_train_batch_size=args.batch_size,
         per_device_eval_batch_size=args.batch_size,
@@ -162,40 +252,39 @@ def main():
         eval_strategy="steps",
         eval_steps=100,
         logging_steps=10,
-        gradient_accumulation_steps=1,
         report_to="none",
-        assistant_only_loss=True,
-        eos_token=tokenizer.eos_token,
-        dataset_text_field="text",
+        load_best_model_at_end=True,
         metric_for_best_model="f1",
         greater_is_better=True,
-        load_best_model_at_end=True,
+        predict_with_generate=True,
+        prediction_loss_only=False,
+        remove_unused_columns=True,
+        generation_config=GenerationConfig(max_new_tokens=10)
     )
 
     # ------------------------------------------------------------
     # Trainer
     # ------------------------------------------------------------
-    trainer = SFTTrainer(
+    trainer = Seq2SeqTrainer(
         model=model,
-        processing_class=tokenizer,
-        compute_metrics=make_compute_metrics(tokenizer),
-        preprocess_logits_for_metrics=preprocess_logits_for_metrics,
+        tokenizer=tokenizer,
+        args=training_args,
         train_dataset=train_ds,
         eval_dataset=test_ds,
-        args=config,
+        data_collator=data_collator,
+        compute_metrics=make_compute_metrics(tokenizer, test_ds),
     )
 
     # ------------------------------------------------------------
-    # Training
+    # Train
     # ------------------------------------------------------------
     trainer.train()
     trainer.save_model(args.output_dir)
 
 
-
+# ============================================================
+# ENTRY POINT
+# ============================================================
 if __name__ == "__main__":
-    from unsloth import FastLanguageModel
-    from datasets import load_dataset, DatasetDict, Dataset
-    from trl import SFTTrainer, SFTConfig
-
     main()
+
