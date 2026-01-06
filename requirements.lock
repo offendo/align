@@ -519,7 +519,7 @@ tqdm==4.67.1
     # via unsloth
     # via unsloth-zoo
     # via vllm
-transformers==4.57.1
+transformers==4.57.3
     # via align
     # via compressed-tensors
     # via peft
@@ -569,9 +569,9 @@ tyro==0.9.35
     # via unsloth-zoo
 tzdata==2025.2
     # via pandas
-unsloth==2025.11.6
+unsloth==2025.12.10
     # via align
-unsloth-zoo==2025.11.6
+unsloth-zoo==2025.12.8
     # via align
     # via unsloth
 urllib3==2.5.0

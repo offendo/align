@@ -33,7 +33,7 @@ Output **only** one word: `aligned` or `misaligned`.
 # ============================================================
 # DATA PREPROCESSING
 # ============================================================
-def make_conversations(example, training: bool = False):
+def make_conversations(example, training: bool = False, include_content_type: bool = False):
     """
     Convert dataset row into chat format.
     Also keep gold label as plain text for generation-based eval.
@@ -54,6 +54,10 @@ def make_conversations(example, training: bool = False):
         messages.append(
             {"role": "assistant", "content": example["label"]}
         )
+
+    if include_content_type:
+        for m in messages:
+            m['content'] = [{'type': 'text', 'text': m['content']}]
 
     return {
         "messages": messages,
@@ -161,6 +165,10 @@ def main():
         default="Qwen/Qwen3-4B-Instruct-2507",
     )
     parser.add_argument(
+        "--multimodal",
+        action='store_true',
+    )
+    parser.add_argument(
         "--dataset_name",
         type=str,
         default="offendo/mathlib_v4.18.0_misaligned_by_default",
@@ -173,8 +181,9 @@ def main():
 
     # Training hyperparameters
     parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument("--gradient_accumulation_steps", type=int, default=1)
     parser.add_argument("--lr", type=float, default=2e-5)
-    parser.add_argument("--max_steps", type=int, default=5000)
+    parser.add_argument("--max_steps", type=int, default=1000)
     parser.add_argument("--warmup_ratio", type=float, default=0.03)
 
     args = parser.parse_args()
@@ -203,12 +212,12 @@ def main():
     raw_ds = load_dataset(args.dataset_name)
 
     train_ds = raw_ds["train"].map(
-        lambda ex: make_conversations(ex, training=True),
+        lambda ex: make_conversations(ex, training=True, include_content_type=args.multimodal),
         remove_columns=raw_ds["train"].column_names,
     )
 
     test_ds = raw_ds["test"].map(
-        lambda ex: make_conversations(ex, training=False),
+        lambda ex: make_conversations(ex, training=False, include_content_type=args.multimodal),
         remove_columns=raw_ds["test"].column_names,
     )
 
@@ -242,13 +251,14 @@ def main():
 
     training_args = Seq2SeqTrainingArguments(
         output_dir=args.output_dir,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
         per_device_train_batch_size=args.batch_size,
         per_device_eval_batch_size=args.batch_size,
         learning_rate=args.lr,
         max_steps=args.max_steps,
         warmup_ratio=args.warmup_ratio,
         save_strategy="steps",
-        save_steps=500,
+        save_steps=100,
         eval_strategy="steps",
         eval_steps=100,
         logging_steps=10,

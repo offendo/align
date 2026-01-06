@@ -14,8 +14,9 @@ if __name__ == "__main__":
     # -----------------------------
     # Config
     # -----------------------------
-    MODEL_PATH = Path("alignment_classifier/checkpoint-1000/")
-    TOKENIZER_PATH = "Qwen/Qwen3-4B-Instruct-2507"
+    MODEL_PATH = Path("alignment_classifier_qwen8b_2/")
+    # TOKENIZER_PATH = "Qwen/Qwen3-4B-Instruct-2507"
+    TOKENIZER_PATH = "Qwen/Qwen3-8B"
     # DATA_PATH = Path("data/minif2f_test_formatted.json")
     DATA_PATH = "offendo/math-atlas-alignment-3600"
     FINAL_OUTPUT_PATH = Path(MODEL_PATH, str(DATA_PATH).split('/')[-1])
@@ -32,6 +33,7 @@ if __name__ == "__main__":
         ds = load_dataset(str(DATA_PATH), split="test")
     ds = ds.map(make_conversations, load_from_cache_file=False)
     ds = ds.map(lambda batch: {'text': formatting_func(tokenizer, batch)}, batched=True, load_from_cache_file=False)
+    ds = ds.shuffle(seed=1234)
     prompts = list(ds['text'])
 
     # -----------------------------
@@ -40,7 +42,7 @@ if __name__ == "__main__":
     llm = LLM(model=str(MODEL_PATH), enforce_eager=True)
     sampling_params = SamplingParams(
         temperature=0.0,
-        max_tokens=25,
+        max_tokens=10,
         seed=1337,
         skip_special_tokens=True,
     )

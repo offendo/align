@@ -726,7 +726,7 @@ traitlets==5.14.3
     # via nbclient
     # via nbconvert
     # via nbformat
-transformers==4.57.1
+transformers==4.57.3
     # via align
     # via compressed-tensors
     # via peft
@@ -778,9 +778,9 @@ tyro==0.9.35
 tzdata==2025.2
     # via arrow
     # via pandas
-unsloth==2025.11.6
+unsloth==2025.12.10
     # via align
-unsloth-zoo==2025.11.6
+unsloth-zoo==2025.12.8
     # via align
     # via unsloth
 uri-template==1.3.0
